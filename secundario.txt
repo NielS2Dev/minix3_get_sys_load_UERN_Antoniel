@@ -1,0 +1,56 @@
+A ideia agora é fazer uma única coisa: criar uma nova chamada de sistema real dentro do MINIX 3 chamada get_sys_load() e provar que ela funciona.
+
+O plano dividido em 4 etapas simples
+1. Descobrir onde o MINIX guarda os dados (estamos exatamente aqui): O código que você acabou de mostrar (getloadavg.c) revelou que o seu MINIX 3.3.0 usa uma função interna chamada sysctl para ler a carga média do sistema. Agora precisamos apenas olhar duas linhas de dois arquivos (callnr.h e table.c) para ver qual é o próximo número de chamada livre (ex: número 48).
+
+2. Registrar a nova chamada em 4 arquivos do sistema: No MINIX, quem atende chamadas de sistema é o servidor Process Manager (PM). Vamos adicionar a nossa função nele:
+
+callnr.h: dar um número de identificação para a chamada (PM_GETSYSLOAD).
+
+table.c: ligar esse número ao nome da função que vai executá-la.
+
+proto.h: avisar ao compilador que essa função existe.
+
+misc.c: escrever o código C da função que lê a carga média e devolve o valor.
+
+3. Recompilar o MINIX e reiniciar: Rodamos os comandos de compilação do próprio MINIX (make includes, make services, make install) e damos reboot para o sistema carregar a nossa alteração.
+
+4. Testar e mostrar para a professora: Criamos um programinha curto em C (teste_load.c) que chama a get_sys_load(), comparamos o número com o comando uptime do sistema, geramos carga na CPU para ver o número subir e tiramos os prints para o seu GitHub.
+
+
+# 1. Backup de segurança dos 4 arquivos
+cp /usr/src/minix/include/minix/callnr.h{,.bak}
+cp /usr/src/minix/servers/pm/table.c{,.bak}
+cp /usr/src/minix/servers/pm/proto.h{,.bak}
+cp /usr/src/minix/servers/pm/misc.c{,.bak}
+
+# 2. Adiciona PM_GETSYSLOAD (PM_BASE + 48) e muda NR_PM_CALLS para 49 em callnr.h
+sed -i 's/#define PM_GETSYSINFO.*/&\n#define PM_GETSYSLOAD\t\t(PM_BASE + 48)/' /usr/src/minix/include/minix/callnr.h
+sed -i 's/#define NR_PM_CALLS.*/#define NR_PM_CALLS\t\t49\t\/* highest number from base plus one *\//' /usr/src/minix/include/minix/callnr.h
+
+# 3. Registra do_get_sys_load na tabela call_vec em table.c
+sed -i 's/CALL(PM_GETSYSINFO)\t= do_getsysinfo/CALL(PM_GETSYSINFO)\t= do_getsysinfo,\n\tCALL(PM_GETSYSLOAD)\t= do_get_sys_load/' /usr/src/minix/servers/pm/table.c
+
+# 4. Adiciona o protótipo em proto.h
+echo "int do_get_sys_load(void);" >> /usr/src/minix/servers/pm/proto.h
+
+# 5. Adiciona os headers e a função do_get_sys_load() em misc.c
+cat << 'EOF' >> /usr/src/minix/servers/pm/misc.c
+
+#include <sys/sysctl.h>
+#include <uvm/uvm_param.h>
+
+int do_get_sys_load(void)
+{
+	struct loadavg loadinfo;
+	static const int mib[] = { CTL_VM, VM_LOADAVG };
+	size_t size = sizeof(loadinfo);
+	double avg1;
+
+	if (sysctl(mib, 2, &loadinfo, &size, NULL, 0) == -1)
+		return -1;
+
+	avg1 = (double)loadinfo.ldavg[0] / (double)loadinfo.fscale;
+	return (int)(avg1 * 100.0);
+}
+EOF
