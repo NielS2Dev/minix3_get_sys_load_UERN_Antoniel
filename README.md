@@ -4,7 +4,7 @@ Chamada de sistema que retorna o load average (carga média) do sistema.
 
 ## Funcionando
 
-https://i.ibb.co/pjSVWgwZ/Captura-de-tela-de-2026-11-23-22-49-05.png
+![Execução do get_sys_load](https://i.ibb.co/pjSVWgwZ/Captura-de-tela-de-2026-11-23-22-49-05.png)
 
 ## Como funciona
 1. Programa de usuário chama `_syscall`
